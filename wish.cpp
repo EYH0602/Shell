@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include <unistd.h>
+#include <wait.h>
 
 #define BUFF_SIZE 4096
 
@@ -37,17 +38,28 @@ pair<char**, int> parser(char* command) {
     return make_pair(argv, len);
 }
 
-const char* find_path(char* command){
-    string command_std = string(command);
-    vector<string> candidates = {"/bin", "/usr/bin"};
-    for (string bin : candidates) {
-        string full_path = bin + "/" + command_std;
-        cout << full_path << endl;
-        int acc = access(full_path.c_str(), X_OK);
-        cout << acc << endl;
-        if (acc == 0)
-            return full_path.c_str();
+char* find_path(char* command){
+    char* buff = new char[BUFF_SIZE];
+    char* buff2 = new char[BUFF_SIZE];
+    char bin[] = "/bin/";
+    char usrbin[]= "/usr/bin/";
+    
+    strcat(buff, bin);
+    strcat(buff, command);
+    buff[string(buff).length() - 1] = '\0';
+    if (access(buff, X_OK) == 0) {
+        delete buff2;
+        return buff;
     }
+    
+    strcat(buff2, usrbin);
+    strcat(buff2, command);
+    buff2[string(buff2).length() - 1] = '\0';
+    if (access(buff2, X_OK) == 0) {
+        delete buff;
+        return buff2;
+    }
+
     cerr << "wish: command not found: " << command << endl;
     exit(1);
 }
@@ -62,22 +74,21 @@ int apply_command(char* command) {
     char** argv = parsed.first;
     // int len = parsed.second;    // only for testing perpose
     
-    cout << find_path(argv[0]) << endl;
-    
     // apply the command
-    // int ret = fork();
-    // if (ret < 0) {
-    //     cerr << "fold failed" << endl;
-    //     return 1;
-    // } else if(ret == 0) {
-    //     // child process,
-    //     // excute the command here
-    //     path = find_path(argv[0]);
-    //     exec(path, argv);
-    // } else {
-    //     // parent process, wait here
-    //     pid_t ret_wait = wait(NULL);
-    // }
+    int ret = fork();
+    if (ret < 0) {
+        cerr << "fold failed" << endl;
+        return 1;
+    } else if(ret == 0) {
+        // child process,
+        // excute the command here
+        char* path = find_path(argv[0]);
+        execv(path, argv);
+        delete path;
+    } else {
+        // parent process, wait here
+        wait(NULL);
+    }
 
     delete argv;
     return 0;
