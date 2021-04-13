@@ -8,6 +8,9 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <wait.h>
 
@@ -22,7 +25,7 @@ void throw_error() {
 }
 
 /*** build-in commands ***/
-vector<string> paths = {"/bin/", "/usr/bin/"};
+vector<string> paths = {"/bin", "/usr/bin"};
 int my_exit() {
     exit(0);
 }
@@ -30,7 +33,7 @@ int my_exit() {
 // chdir()
 // 0 or >1 args -> error
 int my_cd(char** argv) {
-    if (!argv[1] || argv[2]) {
+    if (!argv[1]) {
         throw_error();
         return 1;
     }
@@ -66,7 +69,7 @@ int PATH() {
 /*** functions acting on commands ***/
 // unix API requires c-style string
 bool is_command_char(char ch) {
-    return isalpha(ch) || ch == '-' || ch == '/' || ch == '.';
+    return isalpha(ch) || ch == '-' || ch == '/' || ch == '.' || ch == '>' || isdigit(ch);
 }
 
 string trim(string s) {
@@ -104,6 +107,7 @@ char** parse_command(char* command) {
     char** argv = new char*[len];
     for (int i = 0; i < len; i++) {
         char* comm = (char*)tokens[i].c_str();
+        comm[tokens[i].length()] = '\0';
         argv[i] = comm;
     }
     return argv;
@@ -112,7 +116,8 @@ char** parse_command(char* command) {
 char* find_path(char* command){
     for (size_t i = 0; i < paths.size(); i++) {
         char* buff = new char[BUFF_SIZE];
-        strcat(buff, (char*)paths[i].c_str());
+        string path_with_end = paths[i] + '/';
+        strcat(buff, (char*)path_with_end.c_str());
         strcat(buff, command);
         if (access(buff, X_OK) == 0) {
             return buff;
@@ -135,22 +140,90 @@ string first(string sentence) {
     return res;
 }
 
+int fd = STDOUT_FILENO;
+
+int update_file_descriptor(string& command) {
+    vector<string> words;
+    string comm_new = "";
+    int count = 0;
+    for (char ch : command) {
+        if (ch == '>') {
+            words.push_back(trim(comm_new));
+            words.push_back(">");
+            comm_new = "";
+            count++;
+            continue;
+        }
+        comm_new += ch;
+        if (ch == '\n' || ch == '\0') {
+            if (comm_new != "\n" && comm_new != "\0" && comm_new != " ") {
+                words.push_back(trim(comm_new));
+            }
+            comm_new = "";
+        }
+    }
+    // check valid syntax
+    if (count > 1) {
+        throw_error(); 
+        exit(0);
+    }
+    // for (size_t i = 0; i < words.size(); i++) {
+    //     cout << i << ": " << words[i] << endl;
+    // }
+
+    // cout << words.size() << endl;
+
+    comm_new = "";
+    for (size_t i = 0; i < words.size(); i++) {
+        // cout << words[i] << "    " << (words[i] == ">") << endl;
+        if (words[i] == ">") {
+            if (i+1 >= words.size() || i == 0) {
+                throw_error();
+                exit(0);
+            }
+            if (words[i+1].find(" ") != string::npos) {
+                throw_error();
+                exit(0);
+            }
+
+            fd = open(words[i+1].c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+            if (fd < 0) {
+                throw_error();
+                return 1;
+            }
+
+            dup2(fd,1);
+            dup2(fd,2);
+            close(fd);
+            break;
+        }
+        comm_new += words[i];
+    }
+    command = comm_new + '\n';
+    return 0;
+}
+
 int apply_command(char* line) {
-    
     // parse the input line
     pid_t ret;
     vector<string> commands = parse_line(line, '&', '\n');
 
     // check if it is build-in command
     // change to function pointer if time allows
-    if (first(commands[0]) == "exit")
+    if (first(commands[0]) == "exit") {
+        if (commands[0] != "exit\n") {
+            throw_error();
+            exit(0);
+        }
         my_exit();
+    }
     if (first(commands[0]) == "cd")
         return my_cd(parse_command((char*)commands[0].c_str()));
     if (first(commands[0]) == "path")
         return my_path(parse_command((char*)commands[0].c_str()));
     if (first(commands[0]) == "PATH")
         return PATH();
+
     
     // external commands
     for (int i = 0; i < (int)commands.size(); i++) {
@@ -162,11 +235,15 @@ int apply_command(char* line) {
         } else if (ret == 0) {
             // child process,
             // excute the command here
+            
+            // check if there is redirection
+            update_file_descriptor(commands[i]);
             char** argv = parse_command((char*)commands[i].c_str());
             char* path = find_path(argv[0]);
             execv(path, argv);
             delete path;
             delete argv;
+            exit(0);
         } else {
             // parent process,
             // wait until the child process finish
