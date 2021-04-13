@@ -175,7 +175,7 @@ the program should be rerouted to the file `output` (the twist is that this
 is a little different than standard redirection).
 
 If the `output` file exists before you run your program, you should simple
-overwrite it (after truncating it).  
+overwrite it (after truncating it).
 
 The exact format of redirection is a command (and possibly some arguments)
 followed by the redirection symbol followed by a filename. Multiple

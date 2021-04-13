@@ -31,7 +31,7 @@ int my_exit() {
 // 0 or >1 args -> error
 int my_cd(char** argv) {
     if (!argv[1] || argv[2]) {
-        // cerr << "wish: \"cd\" only accepts 1 argumen." << endl;
+        // cerr << "wish: \"cd\" only accepts 1 argument." << endl;
         throw_error();
         return 1;
     }
@@ -43,9 +43,9 @@ int my_cd(char** argv) {
     return 0;   // success
 }
 
-int my_path(char** argv, int len) {
+int my_path(char** argv) {
     vector<string> new_paths;
-    for (int i = 1; i < len; i++) {
+    for (int i = 1; argv[i] != NULL; i++) {
         new_paths.push_back(string(argv[i]));
     }
     paths = new_paths;
@@ -98,15 +98,23 @@ vector<string> parse_line(char* command, char delimiter, char end) {
     return tokens;
 }
 
-pair<char**,int> parse_command(char* command) {
+void pp(char** argv) {
+    for (int i = 0; argv[i] != NULL; i++) {
+        cout << "pp> " << argv[i] << endl;
+    }
+}
+
+char** parse_command(char* command) {
     vector<string> tokens = parse_line(command, ' ', '\0'); 
     int len = tokens.size();
     char** argv = new char*[len];
     for (int i = 0; i < len; i++) {
-        argv[i] = (char*)tokens[i].c_str();
+        char* comm = (char*)tokens[i].c_str();
+        // comm[tokens[i].length()] = '\0';
+        argv[i] = comm;
     }
-
-    return make_pair(argv,len);
+//    pp(argv);
+    return argv;
 }
 
 char* find_path(char* command){
@@ -119,34 +127,42 @@ char* find_path(char* command){
         }
         delete buff; 
     }
-    // cerr << "wish: command not found: " << command << endl;
+    cerr << "wish: command not found: " << command << endl;
     throw_error();
     exit(1);
 }
 
+string first(string sentence) {
+    string res = "";
+    for (char ch : sentence) {
+        if (ch == ' ' || ch == '\n') {
+            break;
+        }
+        res += ch;
+    }
+    return res;
+}
+
 int apply_command(char* line) {
     
-    // parse the inpur line
+    // parse the input line
     pid_t ret;
     vector<string> commands = parse_line(line, '&', '\n');
-    vector<pair<char**,int>> args;
-    for (size_t i = 0; i < commands.size(); i++) {
-        args.push_back(parse_command((char*)commands[i].c_str()));
-    }
-    
+
     // check if it is build-in command
     // change to function pointer if time allows
-    if (strcmp((args[0].first)[0], "exit") == 0)
+    if (first(commands[0]) == "exit")
         my_exit();
-    if (strcmp((args[0].first)[0], "cd") == 0)
-        return my_cd(args[0].first);
-    if (strcmp((args[0].first)[0], "path") == 0)
-        return my_path(args[0].first, args[0].second);
-    if (strcmp((args[0].first)[0], "PATH") == 0)
+    // if (strcmp(args[0][0], "cd") == 0)
+    if (first(commands[0]) == "cd")
+        return my_cd(parse_command((char*)commands[0].c_str()));
+    if (first(commands[0]) == "path")
+        return my_path(parse_command((char*)commands[0].c_str()));
+    if (first(commands[0]) == "PATH")
         return PATH();
     
     // external commands
-    for (size_t i = 0; i < args.size(); i++) {
+    for (int i = 0; i < (int)commands.size(); i++) {
         // apply the command
         ret = fork();
         if (ret < 0) {
@@ -155,11 +171,12 @@ int apply_command(char* line) {
         } else if (ret == 0) {
             // child process,
             // excute the command here
-            char** comm = args[i].first;
-            char* path = find_path(comm[0]);
-            execv(path, comm);
+            // cout << "]]] " << args[i][0] << endl;
+            char** argv = parse_command((char*)commands[i].c_str());
+            char* path = find_path(argv[0]);
+            execv(path, argv);
             delete path;
-            delete comm;
+            delete argv;
         } else {
             // parent process,
             // wait until the child process finish
