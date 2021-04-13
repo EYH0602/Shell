@@ -31,7 +31,6 @@ int my_exit() {
 // 0 or >1 args -> error
 int my_cd(char** argv) {
     if (!argv[1] || argv[2]) {
-        // cerr << "wish: \"cd\" only accepts 1 argument." << endl;
         throw_error();
         return 1;
     }
@@ -55,7 +54,8 @@ int my_path(char** argv) {
 // testing
 int PATH() {
     for (string path: paths) {
-        cout<< path << endl;
+        string path_with_newline = path + '\n';
+        write(STDOUT_FILENO, path_with_newline.c_str(), path_with_newline.length());
     }
     return 0;
 }
@@ -98,22 +98,14 @@ vector<string> parse_line(char* command, char delimiter, char end) {
     return tokens;
 }
 
-void pp(char** argv) {
-    for (int i = 0; argv[i] != NULL; i++) {
-        cout << "pp> " << argv[i] << endl;
-    }
-}
-
 char** parse_command(char* command) {
     vector<string> tokens = parse_line(command, ' ', '\0'); 
     int len = tokens.size();
     char** argv = new char*[len];
     for (int i = 0; i < len; i++) {
         char* comm = (char*)tokens[i].c_str();
-        // comm[tokens[i].length()] = '\0';
         argv[i] = comm;
     }
-//    pp(argv);
     return argv;
 }
 
@@ -127,7 +119,7 @@ char* find_path(char* command){
         }
         delete buff; 
     }
-    cerr << "wish: command not found: " << command << endl;
+    // cerr << "wish: command not found: " << command << endl;
     throw_error();
     exit(1);
 }
@@ -153,7 +145,6 @@ int apply_command(char* line) {
     // change to function pointer if time allows
     if (first(commands[0]) == "exit")
         my_exit();
-    // if (strcmp(args[0][0], "cd") == 0)
     if (first(commands[0]) == "cd")
         return my_cd(parse_command((char*)commands[0].c_str()));
     if (first(commands[0]) == "path")
@@ -171,7 +162,6 @@ int apply_command(char* line) {
         } else if (ret == 0) {
             // child process,
             // excute the command here
-            // cout << "]]] " << args[i][0] << endl;
             char** argv = parse_command((char*)commands[i].c_str());
             char* path = find_path(argv[0]);
             execv(path, argv);
@@ -192,12 +182,13 @@ int start_shell(FILE* fp) {
     size_t len;
     // int rnt;
     char* buff = NULL;
+    char prompt[] = "wish> ";
 
     // read from file line by line
     while (1) {
         // prompt if interactive mode
         if (fp == stdin)
-            printf("wish> ");
+            write(STDOUT_FILENO, prompt, 6);
         // read in from stdin or file, stop if EOF
         if(getline(&buff, &len, fp) == EOF)
             return 0;
