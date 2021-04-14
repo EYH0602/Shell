@@ -35,12 +35,25 @@ int my_exit() {
 int my_cd(char** argv) {
     if (!argv[1]) {
         throw_error();
-        return 1;
+        exit(0);
     }
     // try to chdir
     if (chdir(argv[1]) != 0) {
         throw_error();
-        return 1;
+        exit(0);
+    }
+    return 0;   // success
+}
+
+int my_cd2(vector<string> argv) {
+    if (argv.size() != 2) {
+        throw_error();
+        exit(0);
+    }
+    // try to chdir
+    if (chdir(argv[1].c_str()) != 0) {
+        throw_error();
+        exit(0);
     }
     return 0;   // success
 }
@@ -76,7 +89,8 @@ bool is_command_char(char ch) {
            ch == '.' || 
            ch == '>' || 
            ch == '!' ||
-           ch == '?';
+           ch == '?' ||
+           ch == '\0';
 }
 
 string trim(string s) {
@@ -98,14 +112,13 @@ vector<string> parse_line(char* command, char delimiter, char end) {
     string line = "";
     vector<string> tokens;
     bool hasBegin = false;
-    string ending = (end == '\0') ? "" : to_string(end);
 
     for (char* ch = command; *ch; ch++) {
         if (!hasBegin && *ch == ' ')
             continue;
         hasBegin = true;
         line += *ch;
-        if (*ch == delimiter || *ch == '\n') { // || *ch == '\0') {
+        if (*ch == delimiter || *ch == '\n') { 
             tokens.push_back(trim(line) + end);
             line = "";
         }
@@ -113,13 +126,76 @@ vector<string> parse_line(char* command, char delimiter, char end) {
     return tokens;
 }
 
+string go_back = "";
+
+string change_dir(string path) {
+    vector<string> tokens; // = parse_line((char*)path.c_str(), '/', '\0');
+    bool hasBegin = false;
+    string comm_new = "";
+
+    for (char ch : path) {
+        if (!hasBegin && ch == ' ')
+            continue;
+        hasBegin = true;
+        if (ch == '/') {
+            if (comm_new != "")
+                tokens.push_back(trim(comm_new));
+            comm_new = "";
+            continue;
+        }
+        comm_new += ch;
+        if (ch == '\n' || ch == '\0') {
+            if (comm_new != "\n" && comm_new != "\0" && comm_new != " ") {
+                tokens.push_back(trim(comm_new));
+            }
+            comm_new = "";
+        }
+    }
+
+    if (tokens.size() == 1) 
+        return path;
+    string back = "cd ";
+    string cd = "cd";
+
+    // cout << "change dir!!    " << tokens.size() << endl;
+
+    // for (size_t i = 0; i < tokens.size(); i++) {
+    //     cout << tokens[i] << " >~~~" << endl;
+    // }
+
+    for (size_t i = 0; i < tokens.size(); i++) {
+        char* pa[3];
+        pa[0] = (char*)cd.c_str();
+        pa[1] = (char*)tokens[i].c_str();
+        pa[3] = NULL;
+        my_cd(pa);
+        // if (rnt != 0)
+        //     exit(1);
+        back += "../";
+    }
+    go_back = back + "..";
+    return "";
+}
+
 char** parse_command(char* command, bool is_buildin) {
     vector<string> tokens = parse_line(command, ' ', '\0'); 
     int len = tokens.size();
     char** argv = new char*[len];
+
     for (int i = 0; i < len; i++) {
+        argv[i] = new char[BUFF_SIZE];
+        if (i != 0 && tokens[i][0] != '-' && access(tokens[i].c_str(), F_OK) != -1) {
+            string new_path = change_dir(tokens[i]);
+            if (new_path == "") {
+                argv[i] = NULL;
+                break;
+            }
+            // cout << "!!!" << new_path << endl;
+            strcpy(argv[i], (char*)new_path.c_str());
+            continue;
+        }
         char* comm = (char*)tokens[i].c_str();
-        argv[i] = comm;
+        strcpy(argv[i], comm);
     }
     if (is_buildin)
         argv[len] = NULL;
@@ -241,12 +317,13 @@ int apply_command(char* line) {
         my_exit();
     }
     if (first(commands[0]) == "cd")
-        return my_cd(parse_command((char*)commands[0].c_str(), true));
+        return my_cd2(parse_line((char*)commands[0].c_str(), ' ', '\0'));
+        //return my_cd(parse_command((char*)commands[0].c_str(), true));
     if (first(commands[0]) == "path")
         return my_path(parse_line((char*)commands[0].c_str(), ' ', '/'));
     if (first(commands[0]) == "PATH")
         return PATH();
-
+    
     
     // external commands
     for (int i = 0; i < (int)commands.size(); i++) {
@@ -262,11 +339,18 @@ int apply_command(char* line) {
             // check if there is redirection
             update_file_descriptor(commands[i]);
             char** argv = parse_command((char*)commands[i].c_str(), false);
-            // for (int i = 0; argv[i] != NULL; i++) {
-            //     cout << ">>" << argv[i] << "<<" << endl;
-            // }
+            //for (int i = 0; argv[i] != NULL; i++) {
+            //    cout << ">>" << argv[i] << "<<" << endl;
+            //}
+            //cout << go_back << endl;
+           
             char* path = find_path(argv[0]);
             execv(path, argv);
+            if (go_back != "") {
+                int rnt = my_cd(parse_command((char*)go_back.c_str(), true));
+                if (rnt != 0)
+                    exit(1);
+            }
             delete path;
             delete argv;
             exit(0);
