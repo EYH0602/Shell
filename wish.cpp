@@ -137,7 +137,7 @@ char* find_path(char* command){
         }
         delete buff; 
     }
-    cerr << "wish: command not found: " << command << endl;
+    // cerr << "wish: command not found: " << command << endl;
     throw_error();
     exit(1);
 }
