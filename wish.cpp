@@ -177,14 +177,15 @@ string change_dir(string path) {
     return "";
 }
 
-char** parse_command(char* command, bool is_buildin) {
+char** parse_command(char* command, bool is_buildin, bool is_ls) {
     vector<string> tokens = parse_line(command, ' ', '\0'); 
     int len = tokens.size();
     char** argv = new char*[len];
 
     for (int i = 0; i < len; i++) {
         argv[i] = new char[BUFF_SIZE];
-        if (i != 0 && tokens[i][0] != '-' && access(tokens[i].c_str(), F_OK) != -1) {
+        if (i != 0 && tokens[i][0] != '-' && is_ls 
+                && (access(tokens[i].c_str(), F_OK) != -1)) {
             string new_path = change_dir(tokens[i]);
             if (new_path == "") {
                 argv[i] = NULL;
@@ -338,7 +339,9 @@ int apply_command(char* line) {
             
             // check if there is redirection
             update_file_descriptor(commands[i]);
-            char** argv = parse_command((char*)commands[i].c_str(), false);
+            cout << (first(commands[i]) == "ls") << endl;
+            char** argv = parse_command((char*)commands[i].c_str(), false, 
+                    first(commands[i]) == "ls");
             //for (int i = 0; argv[i] != NULL; i++) {
             //    cout << ">>" << argv[i] << "<<" << endl;
             //}
@@ -347,7 +350,7 @@ int apply_command(char* line) {
             char* path = find_path(argv[0]);
             execv(path, argv);
             if (go_back != "") {
-                int rnt = my_cd(parse_command((char*)go_back.c_str(), true));
+                int rnt = my_cd(parse_command((char*)go_back.c_str(), true, false));
                 if (rnt != 0)
                     exit(1);
             }
