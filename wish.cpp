@@ -326,6 +326,7 @@ int main(int argc, char* argv[]) {
     FILE* fp = (argc == 1) ? stdin : fopen(argv[1], "r");
 
     if (!fp) {
+        throw_error();
         return 1;
     }
 
