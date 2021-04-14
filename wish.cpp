@@ -128,16 +128,16 @@ char** parse_command(char* command, bool is_buildin) {
 
 char* find_path(char* command){
     for (size_t i = 0; i < paths.size(); i++) {
-        char* buff = new char[BUFF_SIZE];
+        char* buff = new char[paths[i].length() + 1];
+        strcpy(buff, paths[i].c_str());
         // string path_with_end = paths[i] + '/';
-        strcat(buff, (char*)paths[i].c_str());
         strcat(buff, command);
         if (access(buff, X_OK) == 0) {
             return buff;
         }
         delete buff; 
     }
-    // cerr << "wish: command not found: " << command << endl;
+    cerr << "wish: command not found: " << command << endl;
     throw_error();
     exit(1);
 }
