@@ -98,13 +98,14 @@ vector<string> parse_line(char* command, char delimiter, char end) {
     string line = "";
     vector<string> tokens;
     bool hasBegin = false;
+    string ending = (end == '\0') ? "" : to_string(end);
 
     for (char* ch = command; *ch; ch++) {
         if (!hasBegin && *ch == ' ')
             continue;
         hasBegin = true;
         line += *ch;
-        if (*ch == delimiter || *ch == '\n' || *ch == '\0') {
+        if (*ch == delimiter || *ch == '\n') { // || *ch == '\0') {
             tokens.push_back(trim(line) + end);
             line = "";
         }
@@ -118,7 +119,6 @@ char** parse_command(char* command, bool is_buildin) {
     char** argv = new char*[len];
     for (int i = 0; i < len; i++) {
         char* comm = (char*)tokens[i].c_str();
-        comm[tokens[i].length()] = '\0';
         argv[i] = comm;
     }
     if (is_buildin)
