@@ -3,4 +3,5 @@ tests-out
 .vscode
 aa
 tests/*
+try.cpp
 
