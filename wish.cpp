@@ -205,7 +205,9 @@ int update_file_descriptor(string& command) {
                 exit(0);
             }
 
-            fd = open(words[i+1].c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+            mode_t S_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+            int O_FLAG = O_CREAT | O_RDWR;
+            fd = open(words[i+1].c_str(), O_FLAG, S_MODE);
             if (fd < 0) {
                 throw_error();
                 return 1;
@@ -262,10 +264,11 @@ int apply_command(char* line) {
             // check if there is redirection
             update_file_descriptor(commands[i]);
             char** argv = parse_command((char*)commands[i].c_str(), false);
-            // for (int i = 0; argv[i] != NULL; i++) {
-            //     cout << ">>" << argv[i] << "<<" << endl;
-            // }
             char* path = find_path(argv[0]);
+            strcpy(argv[0], path);
+            for (int i = 0; argv[i] != NULL; i++) {
+                cout << ">>" << argv[i] << "<<" << endl;
+            }
             execv(path, argv);
             delete path;
             delete argv;

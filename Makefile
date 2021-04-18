@@ -1,13 +1,16 @@
 CC = g++
 FLAGS = -Wall -Werror
 
-all: wish
+all: new
 
 wish: wish.cpp
 	$(CC) -o wish wish.cpp $(FLAGS)
 
-dish: dish.cpp
-	$(CC) -o dish dish.cpp $(FLAGS)
+new: wish_new.cpp
+	$(CC) -o wish wish_new.cpp 
+
+passed: wish_passed.c
+	gcc -o wish wish_passed.c $(FLAGS)
 
 clean:
 	rm -rf *.o wish
