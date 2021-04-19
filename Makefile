@@ -1,7 +1,7 @@
 CC = g++
 FLAGS = -Wall -Werror
 
-all: new
+all: wish
 
 wish: wish.cpp
 	$(CC) -o wish wish.cpp $(FLAGS)
