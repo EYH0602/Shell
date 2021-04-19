@@ -82,6 +82,7 @@ struct Command{
         char* separated[BUFF_SIZE] = {};    // seperated line by > redirection
         int count = 0;                      // count of >, at most 1
         int can_access;
+        bool is_empty_here = false;
 
         
         // ! check for redirection
@@ -93,33 +94,35 @@ struct Command{
         // cout << count << endl;
         // cout << "[[[" << count << "]]]" << endl;
         if (count > 1) {
-            throw_error(1);
+            throw_error(2);
         } else if (count == 0) {  // no redirection
             
             this->fd_out = STDOUT_FILENO;
             this->fd_err = STDERR_FILENO;
         } else {
-            if (strcmp(separated[0], "") == 0) {
-                throw_error(1);
+            if (strcmp(separated[0], "") == 0 || strcmp(separated[1], "") == 0) {
+                // throw_error(2);
+                is_empty_here = true;
             }
-            if (strcmp(separated[1], "") == 0) {
-                throw_error(1);
-            } 
+
+
             separated[1] = trim(separated[1]); // redirection target location
 
             // redirection only support 1 file,
             // if there is space in target location after trim
             // it means there are more than 1 file location
             if (string(separated[1]).find(" ") != string::npos) {
-                throw_error(0);
+                // throw_error(0);
+                is_empty_here = true;
             }
 
             mode_t S_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-            int O_FLAG = O_CREAT | O_RDWR;
+            int O_FLAG = O_CREAT | O_RDWR | O_TRUNC;
             int fd;
 
             if ((fd = open(separated[1], O_FLAG, S_MODE)) < 0) {
-                throw_error(1);
+                // throw_error(1);
+                is_empty_here = true;
             }
 
             this->fd_out = fd;
@@ -164,14 +167,19 @@ struct Command{
                     break;
                 }
                 if (can_access == -1 && i == paths_len-1) {
-                    this->path[0] = '\0';   // reset buffer
-                    strcpy(this->path, this->argv[0]);
-                    // use -1 tp denote empty command
-                    this->fd_out = -1;
-                    this->fd_err = -1;
+                    is_empty_here = true;
                 }
             }
         }
+
+        if (is_empty_here){
+            this->path[0] = '\0';   // reset buffer
+            strcpy(this->path, this->argv[0]);
+            // use -1 tp denote empty command
+            this->fd_out = -1;
+            this->fd_err = -1;
+        }
+
     }
 };
 
@@ -254,11 +262,41 @@ int apply_command(Command commands[], int len) {
             if (is_empty_command(commands[i])) {
                 throw_error(1);
             }
+
+            // int out = dup(fileno(stdout));
+            // int err = dup(fileno(stderr));
+            
             dup2(commands[i].fd_out, 1);
             dup2(commands[i].fd_err, 2);
+
+            // if (commands[i].fd_out != STDOUT_FILENO) {
+            //     char emp[BUFF_SIZE];
+            //     memset(emp, 0, sizeof(emp));
+            //     write(commands[i].fd_out, emp, BUFF_SIZE);
+            // }
+
+            // if (dup2(commands[i].fd_out, 1) == -1) {
+            //     return errno;
+            // }
+            // if (dup2(commands[i].fd_err, 2) == -1) {
+            //     return errno;
+            // }
+
+
             // cout << commands[i].path << "  " << commands[i].argv[0] << endl;
             execv(commands[i].path, commands[i].argv);
-            exit(0);
+
+
+
+            // fflush(stdout);
+            // fflush(stderr);
+            close(commands[i].fd_out);
+            close(commands[i].fd_err);
+            // dup2(out, fileno(stdout));
+            // dup2(err, fileno(stderr));
+            // close(out);
+            // close(err);
+            // exit(errno);
         } 
         else {
             wait(NULL);
@@ -350,17 +388,16 @@ int start_shell(FILE* fp) {
                 throw_error(2);
             }
             if (apply_command(commands, count) != 0) {
-                cout << "inner" << endl;
                 throw_error(1);
             }
 
         } else {
             if (apply_command(commands, count) != 0) {
-                cout << "otter" << endl;
                 throw_error(1);
             }
         }
 
+        // close_all_fd(commands, count);
     }
     fclose(fp);
     return 0; 
