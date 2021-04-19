@@ -1,8 +1,6 @@
 
 #include <iostream>
 #include <string>
-#include <vector>
-#include <utility>  // pair
 
 #include <cstdio>
 #include <cstdlib>
@@ -25,6 +23,12 @@ const char* usrbin = "/usr/bin";
 char* paths[BUFF_SIZE] = {(char*)bin, (char*)usrbin};  // default search path
 int paths_len = 2;
 
+// * Helper Functions * //
+/**
+ * Dispaly the required error message.
+ * @param code ERROR Code.
+ * Exit the process/program if code is 0 or 1.
+ */
 void throw_error(int code) {
     char error_message[30] = "An error has occurred\n\0";
     write(STDERR_FILENO, error_message, strlen(error_message)); 
@@ -34,6 +38,11 @@ void throw_error(int code) {
     exit(code);
 }
 
+/**
+ * Check the command is a build-in command.
+ * @param command Command in string.
+ * @return If this command is a build-in command.
+ */
 bool is_buildin(char* command) {
     return strcmp(command, "exit") == 0 ||
            strcmp(command, "cd") == 0 ||
@@ -41,7 +50,11 @@ bool is_buildin(char* command) {
            strcmp(command, "PATH") == 0;
 }
 
-// * string operations * //
+/**
+ * Remove spaces at both end of a string.
+ * @param str The string to be trim.
+ * @return The pointer to new string starting location.
+ */
 char* trim(char* str) {
     // form head
     while (isspace(*str) && *str) {
@@ -63,7 +76,61 @@ char* trim(char* str) {
     return str;
 }
 
-// command structure
+// * build-in commands * //
+/**
+ * The build-in cd command.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ */
+void my_cd(int argc, char** argv) {
+    if (argc != 2) {
+        throw_error(0);
+    }
+    if (chdir(argv[1]) != 0) {
+        throw_error(1);
+    }
+}
+
+/**
+ * The build-in path command.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ */
+void my_path(int argc, char** argv) {
+    // no arguments, reset search path to empty
+    if (argc == 1) {
+        memset(&paths[0], 0, sizeof(paths));
+        paths_len = 0;
+    }
+    paths_len = 0;
+    for (int i = 1; i < argc; i++) {
+        paths[i-1] = strdup(argv[i]);
+        paths_len += 1;
+    }
+}
+
+/**
+ * The build-in exit command.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ */
+void my_exit(int argc, char** argv) {
+    if (argc != 1) {
+        throw_error(0);
+    }
+    exit(0);
+}
+
+/**
+ * Build-in command to check the current path variable.
+ */
+void PATH() {
+    for (int i = 0; i < paths_len; i++) {
+        cout << paths[i] << endl;
+    }
+}
+
+// * Command Operations * //
 struct Command{
     int argc;       // number of arguments in this command
     int fd_out;     // file descripter for stdout
@@ -71,6 +138,7 @@ struct Command{
     char path[BUFF_SIZE];   // path to command
     char* argv[BUFF_SIZE];  // argument vector of this command
 
+    /** Deafult Constructor **/
     Command() {
         this->argc = 0;
         this->fd_out = -1;
@@ -79,6 +147,10 @@ struct Command{
         memset(this->argv, 0, sizeof(this->argv));
     }
 
+    /**
+     * Overload Constructor
+     * @param line a line of command string.
+     */
     Command(char* line) {
         char* separated[BUFF_SIZE] = {};    // seperated line by > redirection
         int count = 0;                      // count of >, at most 1
@@ -98,11 +170,11 @@ struct Command{
             this->fd_out = STDOUT_FILENO;
             this->fd_err = STDERR_FILENO;
         } else {
+            
+            // check empty command
             if (strcmp(separated[0], "") == 0 || strcmp(separated[1], "") == 0) {
-                // throw_error(2);
                 is_empty_here = true;
             }
-
 
             separated[1] = trim(separated[1]); // redirection target location
 
@@ -110,7 +182,6 @@ struct Command{
             // if there is space in target location after trim
             // it means there are more than 1 file location
             if (string(separated[1]).find(" ") != string::npos) {
-                // throw_error(0);
                 is_empty_here = true;
             }
 
@@ -118,6 +189,8 @@ struct Command{
             int O_FLAG = O_CREAT | O_RDWR | O_TRUNC;
             int fd;
 
+            // try to open the redirected output file,
+            // give a default command if failed.
             if ((fd = open(separated[1], O_FLAG, S_MODE)) < 0) {
                 // throw_error(1);
                 is_empty_here = true;
@@ -129,42 +202,37 @@ struct Command{
 
 
         // ! read in the command
-        this->argc = 0;                  // count of argument
+        this->argc = 0;                     // count of argument
         separated[0] = trim(separated[0]);  // command string
 
+        // parse the command line with respect to > redirection.
         while ((this->argv[this->argc] = strsep(&separated[0], " ")) != NULL) {
             this->argc++;
         }
 
-        // cout << this->argc << endl;
-
         // trip all
         for (int i = 0; i < this->argc; i++) {
             this->argv[i] = trim(this->argv[i]);
-            // cout << this->argv[i] << endl;
         }
 
         // skip if build-in command
         if (is_buildin(this->argv[0])){
             strcpy(this->path, this->argv[0]);
         } else {
-            // cout << "here" << endl;
             for (int i = 0; i < paths_len; i++) {
                 this->path[0] = '\0';   // reset buffer
-                // printf("!!!-> %d\n", i);
-                // for (int i = 0; i < paths_len; i++) {
-                //     cout << paths[i] << endl;
-                // }
-                // printf("<- !!!\n");
+
+                // add command name to a path variable.
                 strcpy(this->path, paths[i]);
                 strcat(this->path, "/");
                 strcat(this->path, this->argv[0]);
-                // cout << this->path << endl;
+
                 can_access = access(this->path, X_OK);
                 if (can_access == 0) {
                     break;
                 }
-                if (can_access == -1 && i == paths_len-1) {
+                // no more path to check, then the command is empty.
+                if (can_access == -1 && i == paths_len - 1) {
                     is_empty_here = true;
                 }
             }
@@ -177,76 +245,28 @@ struct Command{
             this->fd_out = -1;
             this->fd_err = -1;
         }
-
     }
 };
 
-bool is_empty_command(Command com) {
-    return com.fd_out == -1 || com.fd_err == -1;
+/**
+ * Check if a command is empty.
+ * @param command The command to check.
+ * @return if command is empty.
+ */
+bool is_empty_command(Command command) {
+    return command.fd_out == -1 || command.fd_err == -1;
 }
 
-bool has_empty(Command comms[], int len) {
-    for (int i = 0; i < len; i++) {
-        if (is_empty_command(comms[i])) {
-            return true;
-        }
-    }
-    return false;
-}
 
-// const Command EMPTY_COMMAND = Command();
-
-// * build-in commands * //
-void my_cd(int argc, char** argv) {
-    if (argc != 2) {
-        throw_error(0);
-    }
-    if (chdir(argv[1]) != 0) {
-        throw_error(1);
-    }
-}
-
-void my_path(int argc, char** argv) {
-    // no arguments, reset search path to empty
-    if (argc == 1) {
-        memset(&paths[0], 0, sizeof(paths));
-        paths_len = 0;
-    }
-    paths_len = 0;
-    for (int i = 1; i < argc; i++) {
-        paths[i-1] = strdup(argv[i]);
-        paths_len += 1;
-    }
-}
-
-void my_exit(int argc, char** argv) {
-    if (argc != 1) {
-        throw_error(0);
-    }
-    exit(0);
-}
-
-void PATH() {
-    for (int i = 0; i < paths_len; i++) {
-        cout << paths[i] << endl;
-    }
-}
-
-void close_all_fd(Command commands[], int len) {
-    for (int i = 0; i < len; i++) {
-        if (commands[i].fd_out != STDOUT_FILENO) {
-            close(commands[i].fd_out);
-        }
-        if (commands[i].fd_err != STDERR_FILENO) {
-            close(commands[i].fd_err);
-        }
-    }
-}
-
-#define SHOW_PROMPT write(STDOUT_FILENO, prompt, strlen(prompt))
-
+/**
+ * Execute a line of command.
+ * @param commands A list of command pre-parsed by '&'.
+ * @param len Length of commands.
+ * @return ERROR Code. 0 if success.
+ */
 int apply_command(Command commands[], int len) {
     pid_t pids[BUFF_SIZE];
+    int status;
     
 
     for (int i = 0; i < len; i++) {
@@ -254,69 +274,61 @@ int apply_command(Command commands[], int len) {
         if (pids[i] < 0) {
             throw_error(1);
         } else if (pids[i] == 0) {
+            pids[i] = getpid(); // save pid for concurrent command execution
+
             // child process
             // execute the command here
             if (is_empty_command(commands[i])) {
                 throw_error(1);
             }
-
-            // int out = dup(fileno(stdout));
-            // int err = dup(fileno(stderr));
             
+            // redirect to this command's output location
             dup2(commands[i].fd_out, 1);
             dup2(commands[i].fd_err, 2);
 
-            // if (commands[i].fd_out != STDOUT_FILENO) {
-            //     char emp[BUFF_SIZE];
-            //     memset(emp, 0, sizeof(emp));
-            //     write(commands[i].fd_out, emp, BUFF_SIZE);
-            // }
 
-            // if (dup2(commands[i].fd_out, 1) == -1) {
-            //     return errno;
-            // }
-            // if (dup2(commands[i].fd_err, 2) == -1) {
-            //     return errno;
-            // }
-
-
-            // cout << commands[i].path << "  " << commands[i].argv[0] << endl;
+            // execute 
             execv(commands[i].path, commands[i].argv);
 
-
-
-            // fflush(stdout);
-            // fflush(stderr);
             close(commands[i].fd_out);
             close(commands[i].fd_err);
-            // dup2(out, fileno(stdout));
-            // dup2(err, fileno(stderr));
-            // close(out);
-            // close(err);
-            // exit(errno);
+            exit(0);
         } 
-        else {
-            wait(NULL);
-        }
     }
-    // for (int i = 0; i < len; i++) {
-    //     waitpid(pids[i], &status, 0);
-    // }
+    for (int i = 0; i < len; i++) {
+        waitpid(pids[i], &status, 0);
+    }
     return 0;
 }
 
+/**
+ * Print the full detail of a command to STDOUT.
+ * @param command The command you want to check.
+ */
 void printCommand(Command command) {
-    cout << "argc:  "   << command.argc << endl;;      // number of arguments in this command
-    cout << "fd_out:    " << command.fd_out << endl;;    // file descripter for stdout
-    cout << "fd_err:    " << command.fd_err << endl;;    // file descripter for stderr
-    cout << "path:  " << command.path << endl;;   // path to command
+    cout << ">>>==========>" << endl;
+    cout << "argc:  "   << command.argc << endl;        // number of arguments in this command
+    cout << "fd_out:    " << command.fd_out << endl;    // file descripter for stdout
+    cout << "fd_err:    " << command.fd_err << endl;    // file descripter for stderr
+    cout << "path:  " << command.path << endl;          // path to command
     cout << "argv:" << endl;
     for (int i = 0; i < command.argc; i++)
         cout << "   " << i << ": " << command.argv[i] << endl;
-    cout << "==========" << endl;
+    cout << "<==========<<<" << endl;
 }
 
 // * main program * //
+/**
+ * Display the prompt at begining of line.
+ * @param prompt Your prompt with ending charactor '\0'.
+ */
+#define SHOW_PROMPT(prompt) write(STDOUT_FILENO, prompt, strlen(prompt))
+
+/**
+ * Start this shell session, reading and executing.
+ * @param fp Input file.
+ * @return ERROR code. 0 if success.
+ */
 int start_shell(FILE* fp) {
 
     size_t cap = 0;
@@ -330,8 +342,8 @@ int start_shell(FILE* fp) {
     }
 
 
-    // // read from file/STDIN line by line
-    while (SHOW_PROMPT, len = getline(&buff, &cap, fp) > 0) {
+    // read from file/STDIN line by line
+    while (SHOW_PROMPT(prompt), (len = getline(&buff, &cap, fp)) > 0) {
         buff = trim(buff); // move pointer to the first nonspace char 
 
         // skip empty line
@@ -349,15 +361,14 @@ int start_shell(FILE* fp) {
             count++;
         }
 
-        // cout << "<<<" << count << ">>>" << endl;
-
         // store the commands in Command struct and in array
         for (int i = 0; i < count; i++) {
             commands[i] = Command(command_buff[i]);
-            // printCommand(commands[i]);
+
+            #ifdef _SHOW_COMMAND_INFO_
+            printCommand(commands[i]);
+            #endif
         }
-
-
 
         if (count == 1) {
             // check if it is build in command
@@ -379,7 +390,6 @@ int start_shell(FILE* fp) {
                 continue;
             }
 
-
             // not a buildin command
             if (paths_len == 0) {
                 throw_error(2);
@@ -394,9 +404,8 @@ int start_shell(FILE* fp) {
             }
         }
 
-        // close_all_fd(commands, count);
     }
-    // fclose(fp);
+    fclose(fp);
     return 0; 
 }
 
