@@ -10,7 +10,7 @@
 #include <sys/uio.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <wait.h>
+#include <sys/wait.h>
 
 #define BUFF_SIZE 200
 #define EMPTY_COMMAND = -1
